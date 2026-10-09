@@ -139,8 +139,10 @@ python3 watch.py --once      # 手动跑一次监控（有更新会推送）
 **方式 A：launchd 定时任务（推荐，开机自启、后台静默）**
 
 ```bash
-# 先编辑 com.xhq.channels-watch.plist，把 /Users/YOUR_USERNAME/Developer/channels-watch
-# 替换为你实际 clone 的路径（共 3 处：ProgramArguments、WorkingDirectory、日志路径）
+# 先编辑 com.xhq.channels-watch.plist：把三处路径（ProgramArguments、
+# WorkingDirectory、日志路径）改成服务实际运行的目录——
+# 生产副本 ~/.local/share/channels-watch（见下文「生产部署」），
+# 不用生产副本时就是你的 clone 目录
 cp com.xhq.channels-watch.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
 ```
@@ -154,6 +156,34 @@ launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
 python3 watch.py --loop
 ```
 
+## 生产部署（运行已安装副本）
+
+上面的「快速开始」直接用 clone 目录运行，试用够用；如果打算长期挂着监控，建议装一份**生产副本**，让 launchd 只跑它——之后 clone 里的改动、实验、`git pull` 都不再影响正在运行的服务。
+
+```bash
+# 1. 下载最新 Release 并解压
+gh release download --repo xhqing/channels-watch --archive=tar.gz --dir /tmp/cw-release
+tar -xzf /tmp/cw-release/channels-watch-*.tar.gz -C /tmp/cw-release
+
+# 2. 把脚本装进生产目录
+mkdir -p ~/.local/share/channels-watch
+cp /tmp/cw-release/channels-watch-*/watch.py ~/.local/share/channels-watch/
+
+# 3. 把运行时数据放到脚本旁边（首次迁移把 clone 里已有的移过来，全新使用则跳过）
+#    config.json、state.json、profile/、logs/ 都与 watch.py 同目录
+mv config.json state.json profile logs ~/.local/share/channels-watch/
+
+# 4. 装 launchd 任务：先把 plist 里的三处路径改成 ~/.local/share/channels-watch，再加载
+cp com.xhq.channels-watch.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
+```
+
+> 没装 GitHub CLI 的话，第 1 步改为从 [Releases 页面](https://github.com/xhqing/channels-watch/releases) 下载「Source code (tar.gz)」压缩包。
+
+**升级**：下载新 Release，只替换生产目录里的 `watch.py`（`config.json`、`state.json`、`profile/`、`logs/` 原样保留），launchd 任务不动——下一轮就用上新代码。不要把生产目录当 git 仓库 `git pull`；开发一律在 clone 里做。
+
+**开发调试**：在 clone 里开发；开发运行需要线上登录态时，把生产目录的 `profile/` 复制过来，或在 clone 里跑 `python3 watch.py --login` 建一份独立登录态。
+
 ## 常见问题
 
 **Q：登录态多久失效？失效了怎么办？**
@@ -164,7 +194,7 @@ python3 watch.py --loop
 快速登录能完成时监控会自动恢复，不会提醒。
 
 只有当脚本提醒「登录失效」——也就是宽限期内快速登录也没成功、页面要求扫码时，
-才需要运行 `python3 watch.py --login` 重新扫码。
+才需要运行 `python3 watch.py --login` 重新扫码（在服务实际运行的目录里跑——装了生产副本就是生产目录）。
 
 **Q：收不到推送，怎么排查？**
 1. 先手动跑一次测试推送命令（见第 2 步），排除推送通道本身的问题；
@@ -194,6 +224,8 @@ channels-watch/
 ├── CHANGELOG.md                # 变更记录
 └── VERSION                     # 版本号
 ```
+
+`config.json`、`state.json`、`profile/`、`logs/` 都生成在 `watch.py` 所在目录——从 clone 运行就在 clone 里，装了生产副本就在生产目录里。
 
 ## 运行环境
 

@@ -5,17 +5,20 @@
   <key>Label</key>
   <string>com.xhq.channels-watch</string>
 
-  <!-- 使用前：把下方所有 /Users/YOUR_USERNAME 替换为你 clone 本仓库的实际路径 -->
+  <!-- 使用前：把下方所有 /Users/YOUR_USERNAME 替换为你的用户名。
+       默认路径按「生产副本」布局（从 Release 安装到 ~/.local/share/channels-watch/，
+       运行版本与开发版本隔离，详见 README「生产部署」一节）；
+       若直接用 clone 目录运行，把三处路径改成 clone 的实际路径即可。 -->
 
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/python3</string>
-    <string>/Users/YOUR_USERNAME/Developer/channels-watch/watch.py</string>
+    <string>/Users/YOUR_USERNAME/.local/share/channels-watch/watch.py</string>
     <string>--once</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/YOUR_USERNAME/Developer/channels-watch</string>
+  <string>/Users/YOUR_USERNAME/.local/share/channels-watch</string>
 
   <!-- 每 300 秒（5 分钟）执行一次 -->
   <key>StartInterval</key>
@@ -25,9 +28,9 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/YOUR_USERNAME/Developer/channels-watch/logs/launchd.out.log</string>
+  <string>/Users/YOUR_USERNAME/.local/share/channels-watch/logs/launchd.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/YOUR_USERNAME/Developer/channels-watch/logs/launchd.err.log</string>
+  <string>/Users/YOUR_USERNAME/.local/share/channels-watch/logs/launchd.err.log</string>
 </dict>
 </plist>

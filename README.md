@@ -136,8 +136,10 @@ Send a DM or greeting to your Channels profile from another WeChat account, then
 **Option A: launchd job (recommended — starts at login, runs silently in the background)**
 
 ```bash
-# First edit com.xhq.channels-watch.plist, replacing /Users/YOUR_USERNAME/Developer/channels-watch
-# with the path where you actually cloned the repo (3 occurrences: ProgramArguments, WorkingDirectory, log paths)
+# First edit com.xhq.channels-watch.plist: set the three paths (ProgramArguments,
+# WorkingDirectory, log paths) to the directory the service should run from —
+# the production copy ~/.local/share/channels-watch (see "Production deployment" below),
+# or your clone if you run without a production copy
 cp com.xhq.channels-watch.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
 ```
@@ -151,6 +153,35 @@ launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
 python3 watch.py --loop
 ```
 
+## Production deployment (run an installed copy)
+
+The Quick Start above runs the script straight from your clone — fine for trying it out. If you intend to keep it running for months, install a **production copy** and point launchd at that one: edits, experiments and `git pull` in your clone then never touch the running service.
+
+```bash
+# 1. Download the latest release and extract it
+gh release download --repo xhqing/channels-watch --archive=tar.gz --dir /tmp/cw-release
+tar -xzf /tmp/cw-release/channels-watch-*.tar.gz -C /tmp/cw-release
+
+# 2. Install the script into the production directory
+mkdir -p ~/.local/share/channels-watch
+cp /tmp/cw-release/channels-watch-*/watch.py ~/.local/share/channels-watch/
+
+# 3. Move (first migration) or create the runtime data next to the script:
+#    config.json, state.json, profile/ and logs/ all live in the same directory as watch.py
+mv config.json state.json profile logs ~/.local/share/channels-watch/   # skip if you start fresh
+
+# 4. Install the launchd job: edit the three paths in the plist to
+#    ~/.local/share/channels-watch, then load it
+cp com.xhq.channels-watch.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.xhq.channels-watch.plist
+```
+
+> No GitHub CLI? Download the "Source code (tar.gz)" archive from the [Releases page](https://github.com/xhqing/channels-watch/releases) instead of step 1.
+
+**Upgrading**: download the new release, replace only `watch.py` in the production directory (`config.json`, `state.json`, `profile/`, `logs/` stay untouched), and leave the launchd job as is — the next run uses the new code. Do not `git pull` into the production directory; keep development in the clone.
+
+**Developing**: work in your clone. When a dev run needs the live login session, copy `profile/` over from the production directory, or run `python3 watch.py --login` in the clone to create a separate session.
+
 ## FAQ
 
 **Q: How often does the login session expire, and what do I do?**
@@ -158,7 +189,7 @@ The server revokes the web session from time to time; we have observed it being 
 
 Most of the time **no QR scan is needed**: the login page first attempts a "remembered-account quick login" (showing the last account name and "logging in..."), which usually completes within 10–15 seconds. The script waits up to 40 seconds for it, so monitoring recovers automatically and you are not alerted.
 
-Only when the script reports a session failure — i.e. even the quick login did not finish within the grace period and the page is asking for a QR scan — do you need to run `python3 watch.py --login` again.
+Only when the script reports a session failure — i.e. even the quick login did not finish within the grace period and the page is asking for a QR scan — do you need to run `python3 watch.py --login` again (run it from the directory the service runs from: the production directory if you installed a copy, otherwise your clone).
 
 **Q: Push notifications are not arriving. How do I troubleshoot?**
 1. Run the test push command from Step 2 first, to rule out the push channel itself;
@@ -186,6 +217,8 @@ channels-watch/
 ├── CHANGELOG.md                # change log
 └── VERSION                     # version number
 ```
+
+`config.json`, `state.json`, `profile/` and `logs/` are created next to `watch.py` — in the clone when you run from the clone, or in the production directory when you install a copy.
 
 ## Environment
 

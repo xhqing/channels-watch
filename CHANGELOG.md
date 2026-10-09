@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **生产/开发隔离：服务改为运行已安装副本，不再直跑开发目录**（2026-10-09）。为什么改：launchd 原先直接运行 `~/Developer/channels-watch/watch.py`，违反「运行版本与开发版本隔离」规则（禁止常驻服务直跑开发目录源码）。改了什么：①生产副本从 v0.1.0 Release 归档安装到 `~/.local/share/channels-watch/`（`watch.py` 与开发目录逐字节一致）；②launchd 任务改指生产副本（ProgramArguments / WorkingDirectory / 日志路径）；③运行时数据（`config.json` / `state.json` / `profile/` / `logs/`）迁移到生产目录——登录态与去重状态延续，无需重新登录、不会重复推送；④launchd 模板（`com.xhq.channels-watch.plist`）与双语 README 补充生产部署说明（从 Release 安装、升级只替换 `watch.py`）；⑤`TODO.md` T1 归档。
+
 ## [0.1.0] - 2026-10-09
 
 ### Added
