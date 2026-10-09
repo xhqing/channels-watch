@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-10-09
+
+### 变更
+
+- **同步 Atlas 子项目清单（zcode-cli、cmux-launcher 短期搁置标注）**。为什么改：用户 2026-10-09 决定 zcode-cli 与 cmux-launcher 短期不再维护，Atlas 权威源已作标注，按超集规则本仓库随附版同步。改了什么：随附的 FullStackEngineerAgent CLAUDE.md 全文更新——「目前在手项目」与「当前子项目清单」两处标注两者「自 2026-10-09 起短期搁置」。
+
 ## [0.1.2] - 2026-10-09
 
 ### 变更
