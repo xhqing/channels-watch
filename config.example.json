@@ -1,0 +1,17 @@
+{
+  "push": {
+    "channel": "feishu",
+    "feishu_webhook": "",
+    "ntfy": {
+      "server": "https://ntfy.sh",
+      "topic": ""
+    },
+    "serverchan_key": ""
+  },
+  "interval_seconds": 300,
+  "headless": true,
+  "tabs": {
+    "greeting": true,
+    "private": true
+  }
+}

@@ -1,0 +1,19 @@
+# ---- 本机运行时数据（可能含敏感信息，绝不入库）----
+config.json
+state.json
+profile/
+logs/
+*.log
+.watch.lock
+
+# ---- 通用 ----
+.env
+.env.*
+!.env.example
+settings.local.json
+tmp/
+docs/
+artifacts/
+node_modules/
+.DS_Store
+__pycache__/
