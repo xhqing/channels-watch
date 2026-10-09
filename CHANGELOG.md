@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-10-09
+
+### 变更
+
+- **同步 Atlas 子项目清单（加入 mp4-player）**。为什么改：Atlas 权威源把 mp4-player 登记为新子项目，按超集规则各子项目的随附版需同步（本文件末尾的 FullStackEngineerAgent CLAUDE.md 全文）。改了什么：随附版全文更新——「目前在手项目」与「当前子项目清单」两处加入 mp4-player。
+
 ## [0.1.1] - 2026-10-09
 
 ### Changed
