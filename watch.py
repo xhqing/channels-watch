@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -48,6 +49,13 @@ TABS = (("greeting", "打招呼消息"), ("private", "私信"))
 # 这么长时间，等不到才判定真·未登录（2026-10-09 实测：曾因固定 6 秒就检查，
 # 把快速登录过程误报成了「登录失效」）。
 QUICK_LOGIN_GRACE_SECONDS = 40
+
+# 2026-10-10 事故：微信 4.x 桌面端需真人在「视频号创作平台 申请使用」弹窗点
+# 「允许」才完成快捷登录，只等 is_login_page 翻转永远无法自愈。落在登录页时
+# 点击 iframe 里的「微信快捷登录」发起请求，并在下列窗口内保持浏览器与请求
+# 存活、定期重发请求（微信弹窗超时可再次请求），等人工确认后自动完成登录。
+QUICK_LOGIN_CONFIRM_SECONDS = 300
+QUICK_LOGIN_RECLICK_SECONDS = 90
 
 DEFAULT_CONFIG = {
     "push": {
@@ -232,15 +240,59 @@ def is_login_page(page) -> bool:
     return ("扫码登录" in text) or ("二维码登录" in text) or ("微信扫一扫" in text)
 
 
-def goto_private_msg(page) -> bool:
+def find_in_frames(page, text: str):
+    """在页面所有 frame（含 iframe）里找可见的文本元素；找不到返回 None。
+
+    Playwright 的 locator 穿透 shadow DOM、但不穿透 iframe，所以需要遍历
+    page.frames 再查找（2026-10-10 事故：登录面板渲染在 open.weixin.qq.com
+    的 qrconnect iframe 内）。
+    """
+    for frame in page.frames:
+        try:
+            loc = frame.get_by_text(text, exact=True)
+            for i in range(min(loc.count(), 6)):
+                el = loc.nth(i)
+                try:
+                    if el.is_visible():
+                        return el
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    return None
+
+
+def click_quick_login(page) -> bool:
+    """点击登录面板里的「微信快捷登录」按钮（在 iframe 内，且初始可能 disabled）。
+
+    点击后本机微信会弹「视频号创作平台 申请使用」确认框，真人点「允许」后
+    登录自动完成。返回是否成功点击。
+    """
+    el = find_in_frames(page, "微信快捷登录")
+    if el is None:
+        return False
+    try:
+        el.click(timeout=15000)  # Playwright 会等它 visible/enabled
+        return True
+    except Exception as exc:
+        log(f"点击「微信快捷登录」失败：{exc}")
+        return False
+
+
+def goto_private_msg(page, on_login_page=None) -> bool:
     """进入视频号助手的「私信管理」页。
 
     注意：直接 goto /platform/private_msg 会被重定向回 /platform 首页，
     需要先加载主应用，再点击侧边菜单「私信」。
 
-    另外：登录态被服务端吊销后，登录页会尝试「记住账号快速登录」（显示上次
-    账号 + 「登录中...」），通常 10~15 秒内自动完成、无需扫码。所以落在登录页
-    时先宽限等待（QUICK_LOGIN_GRACE_SECONDS），等不到才判定真·未登录。
+    登录态被吊销后的恢复分两层：
+    1. 登录页先尝试「记住账号快速登录」，通常 10~15 秒内自动完成、无需扫码——
+       落在登录页时先宽限等待（QUICK_LOGIN_GRACE_SECONDS）。
+    2. 2026-10-10 事故起：微信 4.x 桌面端需真人在「视频号创作平台 申请使用」
+       弹窗点「允许」才完成快捷登录——宽限未完成时点击 iframe 里的「微信快捷
+       登录」发起请求，并保持浏览器存活、定期重发请求，等人工确认。
+
+    on_login_page: 自动恢复未完成时回调（用于第一时间发告警，不等恢复窗口结束）。
     """
     page.goto("https://channels.weixin.qq.com/platform", wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(6000)
@@ -249,7 +301,24 @@ def goto_private_msg(page) -> bool:
         while time.time() < deadline and is_login_page(page):
             page.wait_for_timeout(2000)
         if is_login_page(page):
-            return False  # 宽限期内快速登录未完成，判定为真·未登录
+            clicked = click_quick_login(page)
+            if on_login_page is not None:
+                try:
+                    on_login_page()
+                except Exception as exc:
+                    log(f"登录告警回调失败：{exc}")
+            if clicked:
+                log("已请求微信快捷登录——请在微信弹窗点「允许」以恢复登录。")
+                last_click = time.time()
+                confirm_deadline = time.time() + QUICK_LOGIN_CONFIRM_SECONDS
+                while time.time() < confirm_deadline and is_login_page(page):
+                    now = time.time()
+                    if now - last_click >= QUICK_LOGIN_RECLICK_SECONDS:
+                        if click_quick_login(page):
+                            last_click = now
+                    page.wait_for_timeout(2000)
+        if is_login_page(page):
+            return False  # 恢复窗口内未完成，判定为真·未登录
         page.wait_for_timeout(4000)  # 快速登录已完成，等首页应用加载
     if "private_msg" in (page.url or ""):
         page.wait_for_timeout(2000)
@@ -329,17 +398,27 @@ def collect_snapshot(page, tab_label: str) -> dict:
 
 
 def open_context(playwright, headless: bool):
-    return playwright.chromium.launch_persistent_context(
-        user_data_dir=str(PROFILE_DIR),
-        channel="chrome",
-        headless=headless,
-        viewport={"width": 1440, "height": 900},
-        args=[
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-blink-features=AutomationControlled",
-        ],
-    )
+    """启动 Chrome 持久化上下文；失败（如启动超时）时记日志并重试一次。"""
+    last_exc = None
+    for attempt in (1, 2):
+        try:
+            return playwright.chromium.launch_persistent_context(
+                user_data_dir=str(PROFILE_DIR),
+                channel="chrome",
+                headless=headless,
+                viewport={"width": 1440, "height": 900},
+                args=[
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+        except Exception as exc:
+            last_exc = exc
+            log(f"Chrome 启动失败（第 {attempt} 次）：{exc}")
+            if attempt == 1:
+                time.sleep(5)
+    raise RuntimeError(f"Chrome 启动失败：{last_exc}") from last_exc
 
 
 # ---------------------------------------------------------------- 主逻辑
@@ -441,25 +520,49 @@ def run_once(cfg: dict, do_push: bool = True) -> int:
 
     state = load_json(STATE_FILE, {"tabs": {}, "last_login_alert": ""})
     headless = cfg.get("headless", True)
-    with sync_playwright() as p:
-        ctx = open_context(p, headless=headless)
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        ok = goto_private_msg(page)
 
-        if is_login_page(page):
-            log("未登录：登录态可能已失效。")
+    def alert_login_failure() -> None:
+        """自动恢复未完成时立即告警（按日去重）。"""
+        log("未登录：登录态可能已失效。")
+        if not do_push:
+            return
+        last_alert = state.get("last_login_alert", "")
+        today = datetime.now().strftime("%Y-%m-%d")
+        if last_alert.startswith(today):
+            return
+        send_push(
+            cfg,
+            "视频号监控：登录失效",
+            "视频号助手登录态已失效，请在 Mac 上处理：\n"
+            "1. 若屏幕出现微信「视频号创作平台 申请使用」确认框，点「允许」即可自动恢复（监控会自动重试）；\n"
+            f"2. 需要手动登录时（在运行副本目录执行）：cd {BASE_DIR} && python3 watch.py --login",
+        )
+        state["last_login_alert"] = now_str()
+        save_json(STATE_FILE, state)
+
+    with sync_playwright() as p:
+        try:
+            ctx = open_context(p, headless=headless)
+        except Exception as exc:
+            log(f"浏览器启动失败，本轮跳过：{exc}")
             if do_push:
-                last_alert = state.get("last_login_alert", "")
+                last_alert = state.get("last_launch_alert", "")
                 today = datetime.now().strftime("%Y-%m-%d")
                 if not last_alert.startswith(today):
                     send_push(
                         cfg,
-                        "视频号监控：登录失效",
-                        "视频号助手登录态已失效，请到 Mac 上运行：\n"
-                        "cd ~/Developer/channels-watch && python3 watch.py --login",
+                        "视频号监控：浏览器启动失败",
+                        "本轮监控未能启动（Chrome 启动失败，已重试一次）。\n"
+                        f"错误：{exc}",
                     )
-                    state["last_login_alert"] = now_str()
+                    state["last_launch_alert"] = now_str()
                     save_json(STATE_FILE, state)
+            return 4
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        ok = goto_private_msg(page, on_login_page=alert_login_failure)
+
+        if is_login_page(page):
+            log("登录未恢复，本轮结束。")
             ctx.close()
             return 2
 
@@ -546,6 +649,11 @@ def main() -> int:
         if args.loop:
             return cmd_loop(cfg)
         return run_once(cfg, do_push=True)
+    except Exception as exc:
+        # 不把 traceback 抛给 launchd（只进 launchd.err、日常日志无痕迹）：
+        # 记入日常日志后干净退出。
+        log(f"本次执行异常：{exc}\n{traceback.format_exc()}")
+        return 1
     finally:
         try:
             fcntl.flock(lock, fcntl.LOCK_UN)

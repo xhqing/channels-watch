@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [未发布]
+
+### Fixed
+
+- **登录态吊销后无法自愈（2026-10-10 事故）**：微信 4.x 桌面端的快捷登录需真人在「视频号创作平台 申请使用」弹窗点「允许」，旧流程只等 `is_login_page` 翻转、从不点击 → 连续 7 小时无法恢复。修复：宽限等待后点击 iframe 内的「微信快捷登录」（遍历 `page.frames`），并在 300 秒窗口内每 90 秒重发请求（微信弹窗超时可再请求），人工确认后自动完成登录并继续本轮监控。
+- **登录告警文案误导**：原文案写死开发目录 `cd ~/Developer/channels-watch`，而 launchd 跑的是生产副本 `~/.local/share/channels-watch`（profile 独立）→ 改为按运行副本（`BASE_DIR`）动态生成，并补充「若屏幕出现微信『申请使用』确认框，点『允许』即可恢复」。
+- **Chrome 启动失败无痕**：启动失败改为记日常日志 + 重试一次；仍失败则干净退出（不把 traceback 抛给 launchd）并发出告警（按日去重）；未捕获异常一并记入日常日志。
+
 ## [0.1.3] - 2026-10-09
 
 ### 变更
