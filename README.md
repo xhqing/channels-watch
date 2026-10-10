@@ -2,7 +2,7 @@
   <img src="assets/logo.svg" alt="channels-watch" width="640">
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE.md)
-  [![Version](https://img.shields.io/badge/Version-0.1.3-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-0.1.4-blue)](CHANGELOG.md)
   [![Type](https://img.shields.io/badge/Type-Tool-4F46E5)](#)
   [![Visitors](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/xhqing/xhqing/main/traffic/badges/channels-watch.json)](https://github.com/xhqing)
 
