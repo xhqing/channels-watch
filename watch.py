@@ -292,7 +292,8 @@ def goto_private_msg(page, on_login_page=None) -> bool:
        弹窗点「允许」才完成快捷登录——宽限未完成时点击 iframe 里的「微信快捷
        登录」发起请求，并保持浏览器存活、定期重发请求，等人工确认。
 
-    on_login_page: 自动恢复未完成时回调（用于第一时间发告警，不等恢复窗口结束）。
+    on_login_page: 恢复流程走完、仍判定未登录时回调（只在真失败时告警；
+    成功恢复——含窗口内人工点「允许」——保持静默）。
     """
     page.goto("https://channels.weixin.qq.com/platform", wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(6000)
@@ -302,11 +303,6 @@ def goto_private_msg(page, on_login_page=None) -> bool:
             page.wait_for_timeout(2000)
         if is_login_page(page):
             clicked = click_quick_login(page)
-            if on_login_page is not None:
-                try:
-                    on_login_page()
-                except Exception as exc:
-                    log(f"登录告警回调失败：{exc}")
             if clicked:
                 log("已请求微信快捷登录——请在微信弹窗点「允许」以恢复登录。")
                 last_click = time.time()
@@ -318,6 +314,12 @@ def goto_private_msg(page, on_login_page=None) -> bool:
                             last_click = now
                     page.wait_for_timeout(2000)
         if is_login_page(page):
+            # 恢复流程已走完仍未成功——此时才告警（成功恢复保持静默，2026-10-10 用户要求）。
+            if on_login_page is not None:
+                try:
+                    on_login_page()
+                except Exception as exc:
+                    log(f"登录告警回调失败：{exc}")
             return False  # 恢复窗口内未完成，判定为真·未登录
         page.wait_for_timeout(4000)  # 快速登录已完成，等首页应用加载
     if "private_msg" in (page.url or ""):
